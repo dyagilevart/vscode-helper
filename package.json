@@ -1,19 +1,42 @@
 {
   "name": "lumos",
-  "displayName": "lumos",
-  "description": "",
-  "version": "0.0.1",
+  "displayName": "Lumos",
+  "description": "Карточка текущей задачи из Naumen Project Ruler по git-ветке",
+  "version": "0.1.0",
   "engines": {
-    "vscode": "^1.102.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onView:lumos-webview"
+    "onView:lumos.webview",
+    "onCommand:lumos.signIn",
+    "onCommand:lumos.signOut",
+    "onCommand:lumos.refresh"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Lumos",
+      "properties": {
+        "lumos.baseUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Базовый URL Project Ruler, например `https://project-ruler.example.com` (без `/sd`)."
+        },
+        "lumos.taskMetaClass": {
+          "type": "string",
+          "default": "GMtask",
+          "description": "Метакласс задачи для REST search."
+        },
+        "lumos.branchPattern": {
+          "type": "string",
+          "default": "ACRM-\\d+",
+          "description": "Regex для извлечения номера задачи из имени git-ветки."
+        }
+      }
+    },
     "views": {
       "lumos-developerum": [
         {
@@ -28,12 +51,35 @@
       "activitybar": [
         {
           "id": "lumos-developerum",
-          "title": "Lumos developerum",
+          "title": "Lumos",
           "icon": "images/icon.svg"
         }
       ]
     },
-    "commands": []
+    "commands": [
+      {
+        "command": "lumos.signIn",
+        "title": "Lumos: Sign In"
+      },
+      {
+        "command": "lumos.signOut",
+        "title": "Lumos: Sign Out"
+      },
+      {
+        "command": "lumos.refresh",
+        "title": "Lumos: Refresh Task Card",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "lumos.refresh",
+          "when": "view == lumos.webview",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -47,9 +93,9 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.102.0",
+    "@types/vscode": "^1.82.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
+    "@types/node": "18.x",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
     "eslint": "^9.32.0",
