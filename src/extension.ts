@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { CredentialsStore } from './auth/credentials';
 import { getConfig, operatorTaskUrl } from './config';
+import { flavor } from './flavor/messages';
 import { getCurrentGitBranch, onGitHeadChange } from './helper/git';
 import { extractTaskKey } from './helper/taskKey';
 import { AuthRequiredError, NaumenClient } from './naumen/client';
+import { LumosStatusBar } from './view/statusBar';
 import { TaskViewProvider } from './view/taskViewProvider';
 
 let refreshInFlight: Promise<void> | undefined;
@@ -11,15 +13,17 @@ let refreshInFlight: Promise<void> | undefined;
 export function activate(context: vscode.ExtensionContext) {
   const credentials = new CredentialsStore(context.secrets);
   const provider = new TaskViewProvider(context.extensionUri);
+  const statusBar = new LumosStatusBar();
 
   context.subscriptions.push(
+    statusBar,
     vscode.window.registerWebviewViewProvider(TaskViewProvider.viewType, provider)
   );
 
   const refresh = () => {
     refreshInFlight = (refreshInFlight ?? Promise.resolve())
       .catch(() => undefined)
-      .then(() => refreshTaskCard(provider, credentials));
+      .then(() => refreshTaskCard(provider, credentials, statusBar));
     return refreshInFlight;
   };
 
@@ -31,16 +35,16 @@ export function activate(context: vscode.ExtensionContext) {
       }
       const config = getConfig();
       if (!config.baseUrl) {
-        vscode.window.showWarningMessage('Сначала укажите lumos.baseUrl в настройках.');
+        vscode.window.showWarningMessage(flavor.needBaseUrlFirst);
         return;
       }
       try {
         const client = new NaumenClient(config.baseUrl, credentials, config.taskMetaClass);
         await client.login();
-        vscode.window.showInformationMessage('Lumos: вход выполнен');
+        vscode.window.showInformationMessage(flavor.signedIn);
         await refresh();
       } catch (error) {
-        vscode.window.showErrorMessage(`Lumos: не удалось войти — ${errorMessage(error)}`);
+        vscode.window.showErrorMessage(flavor.signInFailed(errorMessage(error)));
         await refresh();
       }
     })
@@ -49,13 +53,40 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('lumos.signOut', async () => {
       await credentials.clear();
-      vscode.window.showInformationMessage('Lumos: данные входа удалены');
+      vscode.window.showInformationMessage(flavor.signedOut);
       await refresh();
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumos.refresh', () => refresh())
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumos.focus', async () => {
+      await provider.reveal();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumos.copyTaskKey', async (taskKey?: string) => {
+      const key = typeof taskKey === 'string' ? taskKey : undefined;
+      if (!key) {
+        return;
+      }
+      await vscode.env.clipboard.writeText(key);
+      vscode.window.setStatusBarMessage(flavor.copiedKey(key), 2000);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumos.copyTaskUrl', async (url?: string) => {
+      if (typeof url !== 'string' || !url) {
+        return;
+      }
+      await vscode.env.clipboard.writeText(url);
+      vscode.window.setStatusBarMessage(flavor.copiedUrl, 2000);
+    })
   );
 
   context.subscriptions.push(
@@ -77,58 +108,68 @@ export function deactivate() {}
 
 async function refreshTaskCard(
   provider: TaskViewProvider,
-  credentials: CredentialsStore
+  credentials: CredentialsStore,
+  statusBar: LumosStatusBar
 ): Promise<void> {
-  provider.setState({ kind: 'loading', message: 'Ищем задачу…' });
+  provider.setState({ kind: 'loading', message: flavor.loading });
+  statusBar.setSearching();
 
   const config = getConfig();
   if (!config.baseUrl) {
+    statusBar.setIdle();
     provider.setState({
       kind: 'needConfig',
-      message: 'Укажите lumos.baseUrl — адрес Project Ruler (без /sd).',
+      message: flavor.needConfig,
     });
     return;
   }
 
   if (!(await credentials.hasCredentials())) {
+    statusBar.setIdle();
     provider.setState({
       kind: 'needAuth',
-      message: 'Войдите логином и паролем Project Ruler, чтобы загрузить карточку задачи.',
+      message: flavor.needAuth,
     });
     return;
   }
 
   const branch = await getCurrentGitBranch();
   if (!branch) {
+    statusBar.setIdle();
     provider.setState({
       kind: 'noBranch',
-      message: 'Git-ветка не найдена. Откройте репозиторий с веткой feature/ACRM-…',
+      message: flavor.noBranch,
     });
     return;
   }
 
   const taskKey = extractTaskKey(branch, config.branchPattern);
   if (!taskKey) {
+    statusBar.setIdle();
     provider.setState({
       kind: 'noTaskKey',
       branch,
-      message: `В ветке «${branch}» не найден номер задачи (${config.branchPattern}).`,
+      message: flavor.noTaskKey(branch),
     });
     return;
   }
+
+  statusBar.setSearching(taskKey);
 
   try {
     const client = new NaumenClient(config.baseUrl, credentials, config.taskMetaClass);
     const task = await client.findTaskByKey(taskKey);
     if (!task) {
+      statusBar.setTask(taskKey);
       provider.setState({
         kind: 'notFound',
         taskKey,
-        message: `Задача ${taskKey} не найдена в Project Ruler.`,
+        message: flavor.notFound(taskKey),
       });
       return;
     }
 
+    statusBar.setTask(taskKey);
     provider.setState({
       kind: 'task',
       taskKey,
@@ -137,15 +178,17 @@ async function refreshTaskCard(
     });
   } catch (error) {
     if (error instanceof AuthRequiredError) {
+      statusBar.setIdle();
       provider.setState({
         kind: 'needAuth',
-        message: 'Сессия истекла или доступ запрещён. Войдите снова.',
+        message: flavor.sessionExpired,
       });
       return;
     }
+    statusBar.setTask(taskKey);
     provider.setState({
       kind: 'error',
-      message: errorMessage(error),
+      message: flavor.error(errorMessage(error)),
     });
   }
 }

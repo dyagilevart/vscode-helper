@@ -1,8 +1,8 @@
 {
   "name": "lumos",
   "displayName": "Lumos",
-  "description": "Карточка текущей задачи из Naumen Project Ruler по git-ветке",
-  "version": "0.1.0",
+  "description": "Милый помощник разработчика: карточка текущей задачи из Project Ruler по git-ветке",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.82.0"
   },
@@ -10,10 +10,12 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onView:lumos.webview",
     "onCommand:lumos.signIn",
     "onCommand:lumos.signOut",
-    "onCommand:lumos.refresh"
+    "onCommand:lumos.refresh",
+    "onCommand:lumos.focus"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -42,7 +44,7 @@
         {
           "type": "webview",
           "id": "lumos.webview",
-          "name": "Task",
+          "name": "Свиток задачи",
           "icon": "images/icon.svg"
         }
       ]
@@ -59,16 +61,28 @@
     "commands": [
       {
         "command": "lumos.signIn",
-        "title": "Lumos: Sign In"
+        "title": "Lumos: Войти"
       },
       {
         "command": "lumos.signOut",
-        "title": "Lumos: Sign Out"
+        "title": "Lumos: Выйти"
       },
       {
         "command": "lumos.refresh",
-        "title": "Lumos: Refresh Task Card",
-        "icon": "$(refresh)"
+        "title": "Lumos: Зажечь свет",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "lumos.focus",
+        "title": "Lumos: Открыть свиток"
+      },
+      {
+        "command": "lumos.copyTaskKey",
+        "title": "Lumos: Скопировать номер задачи"
+      },
+      {
+        "command": "lumos.copyTaskUrl",
+        "title": "Lumos: Скопировать ссылку на задачу"
       }
     ],
     "menus": {

@@ -1,14 +1,19 @@
 # Lumos
 
-Карточка текущей задачи из Naumen Project Ruler по имени git-ветки (`feature/ACRM-123…`).
+Неофициальный помощник разработчика в духе «зажечь свет» над текущей задачей.
+
+Карточка задачи из Naumen Project Ruler определяется по git-ветке (`feature/ACRM-123…`).
 
 ## Настройка
 
 1. Settings → `lumos.baseUrl` — например `https://project-ruler.example.com` (без `/sd`).
-2. Command Palette → **Lumos: Sign In** — логин и пароль.
-3. Откройте сайдбар **Lumos** на ветке с `ACRM-…`.
+2. Command Palette → **Lumos: Войти**.
+3. Откройте сайдбар **Lumos** → **Свиток задачи**.
+
+В status bar появится `✨ ACRM-…` — клик открывает свиток.
 
 ## Команды
 
-- `Lumos: Sign In` / `Lumos: Sign Out`
-- `Lumos: Refresh Task Card`
+- `Lumos: Войти` / `Lumos: Выйти`
+- `Lumos: Зажечь свет` — обновить карточку
+- `Lumos: Открыть свиток`
