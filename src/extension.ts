@@ -2,30 +2,74 @@ import * as vscode from 'vscode';
 import { CredentialsStore } from './auth/credentials';
 import { getConfig, operatorTaskUrl } from './config';
 import { flavor } from './flavor/messages';
-import { getCurrentGitBranch, onGitHeadChange } from './helper/git';
+import { getCurrentGitBranch, onGitBranchNameChange, waitForGitBranch } from './helper/git';
 import { extractTaskKey } from './helper/taskKey';
 import { AuthRequiredError, NaumenClient } from './naumen/client';
+import { ViewState } from './naumen/types';
 import { LumosStatusBar } from './view/statusBar';
 import { TaskViewProvider } from './view/taskViewProvider';
 
+const FETCH_CACHE_MS = 30_000;
+const AUTO_DEBOUNCE_MS = 450;
+
 let refreshInFlight: Promise<void> | undefined;
+let debounceTimer: NodeJS.Timeout | undefined;
+let pendingForce = false;
+let lastFetchedKey: string | undefined;
+let lastFetchedAt = 0;
 
 export function activate(context: vscode.ExtensionContext) {
   const credentials = new CredentialsStore(context.secrets);
   const provider = new TaskViewProvider(context.extensionUri);
   const statusBar = new LumosStatusBar();
 
-  context.subscriptions.push(
-    statusBar,
-    vscode.window.registerWebviewViewProvider(TaskViewProvider.viewType, provider)
-  );
-
-  const refresh = () => {
+  const runRefresh = (force: boolean) => {
     refreshInFlight = (refreshInFlight ?? Promise.resolve())
       .catch(() => undefined)
-      .then(() => refreshTaskCard(provider, credentials, statusBar));
+      .then(() => refreshTaskCard(provider, credentials, statusBar, { force }));
     return refreshInFlight;
   };
+
+  const scheduleRefresh = (options?: { force?: boolean }) => {
+    if (options?.force) {
+      pendingForce = true;
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = undefined;
+      }
+      return runRefresh(true);
+    }
+
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined;
+      const force = pendingForce;
+      pendingForce = false;
+      void runRefresh(force);
+    }, AUTO_DEBOUNCE_MS);
+  };
+
+  context.subscriptions.push(
+    statusBar,
+    vscode.window.registerWebviewViewProvider(TaskViewProvider.viewType, provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    provider.onDidBecomeVisible(() => {
+      // Don't refetch just because the sidebar was focused again.
+      if (provider.needsData()) {
+        scheduleRefresh();
+      }
+    }),
+    {
+      dispose: () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+      },
+    }
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumos.signIn', async () => {
@@ -42,10 +86,11 @@ export function activate(context: vscode.ExtensionContext) {
         const client = new NaumenClient(config.baseUrl, credentials, config.taskMetaClass);
         await client.login();
         vscode.window.showInformationMessage(flavor.signedIn);
-        await refresh();
+        lastFetchedKey = undefined;
+        await scheduleRefresh({ force: true });
       } catch (error) {
         vscode.window.showErrorMessage(flavor.signInFailed(errorMessage(error)));
-        await refresh();
+        await scheduleRefresh({ force: true });
       }
     })
   );
@@ -53,13 +98,17 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('lumos.signOut', async () => {
       await credentials.clear();
+      lastFetchedKey = undefined;
       vscode.window.showInformationMessage(flavor.signedOut);
-      await refresh();
+      await scheduleRefresh({ force: true });
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumos.refresh', () => refresh())
+    vscode.commands.registerCommand('lumos.refresh', () => {
+      lastFetchedKey = undefined;
+      scheduleRefresh({ force: true });
+    })
   );
 
   context.subscriptions.push(
@@ -92,16 +141,20 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('lumos')) {
-        void refresh();
+        lastFetchedKey = undefined;
+        scheduleRefresh({ force: true });
       }
     })
   );
 
-  void onGitHeadChange(() => {
-    void refresh();
-  }).then((disposable) => context.subscriptions.push(disposable));
-
-  void refresh();
+  void (async () => {
+    const disposable = await onGitBranchNameChange(() => {
+      scheduleRefresh();
+    });
+    context.subscriptions.push(disposable);
+    // One initial load; wait for Git inside refresh when branch is not ready yet.
+    await runRefresh(true);
+  })();
 }
 
 export function deactivate() {}
@@ -109,10 +162,16 @@ export function deactivate() {}
 async function refreshTaskCard(
   provider: TaskViewProvider,
   credentials: CredentialsStore,
-  statusBar: LumosStatusBar
+  statusBar: LumosStatusBar,
+  options: { force: boolean }
 ): Promise<void> {
-  provider.setState({ kind: 'loading', message: flavor.loading });
-  statusBar.setSearching();
+  const previous = provider.currentState;
+  const showLoading = options.force || previous.kind === 'loading' || previous.kind === 'noBranch';
+
+  if (showLoading) {
+    provider.setState({ kind: 'loading', message: flavor.loading });
+    statusBar.setSearching();
+  }
 
   const config = getConfig();
   if (!config.baseUrl) {
@@ -133,7 +192,11 @@ async function refreshTaskCard(
     return;
   }
 
-  const branch = await getCurrentGitBranch();
+  let branch = await getCurrentGitBranch();
+  if (!branch && (options.force || previous.kind === 'loading' || previous.kind === 'noBranch')) {
+    branch = await waitForGitBranch();
+  }
+
   if (!branch) {
     statusBar.setIdle();
     provider.setState({
@@ -154,6 +217,16 @@ async function refreshTaskCard(
     return;
   }
 
+  if (
+    !options.force &&
+    taskKey === lastFetchedKey &&
+    Date.now() - lastFetchedAt < FETCH_CACHE_MS &&
+    isSameTaskCard(previous, taskKey)
+  ) {
+    statusBar.setTask(taskKey);
+    return;
+  }
+
   statusBar.setSearching(taskKey);
 
   try {
@@ -169,6 +242,8 @@ async function refreshTaskCard(
       return;
     }
 
+    lastFetchedKey = taskKey;
+    lastFetchedAt = Date.now();
     statusBar.setTask(taskKey);
     provider.setState({
       kind: 'task',
@@ -191,6 +266,10 @@ async function refreshTaskCard(
       message: flavor.error(errorMessage(error)),
     });
   }
+}
+
+function isSameTaskCard(state: ViewState, taskKey: string): boolean {
+  return state.kind === 'task' && state.taskKey === taskKey;
 }
 
 function errorMessage(error: unknown): string {

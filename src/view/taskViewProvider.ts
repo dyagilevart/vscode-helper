@@ -7,6 +7,18 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private state: ViewState = { kind: 'loading', message: 'Lumos…' };
+  private readonly visibleEmitter = new vscode.EventEmitter<void>();
+
+  readonly onDidBecomeVisible = this.visibleEmitter.event;
+
+  get currentState(): ViewState {
+    return this.state;
+  }
+
+  /** True when the panel still needs data and is not already loading. */
+  needsData(): boolean {
+    return this.state.kind !== 'task' && this.state.kind !== 'loading';
+  }
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -17,6 +29,13 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this.extensionUri],
     };
     this.render();
+    this.visibleEmitter.fire();
+
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.visibleEmitter.fire();
+      }
+    });
 
     webviewView.webview.onDidReceiveMessage((message) => {
       if (message?.command === 'signIn') {
