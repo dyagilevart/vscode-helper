@@ -64,7 +64,8 @@ export class NaumenClient {
     const payload = await this.requestJson(url);
 
     const fromSearch = asTask(payload, this.taskMetaClass);
-    if (fromSearch?.title) {
+    // Full object from search — use it. Bare UUID still needs get.
+    if (fromSearch?.title && fromSearch.title !== fromSearch.uuid && Object.keys(fromSearch.raw).length > 0) {
       return fromSearch;
     }
 
