@@ -1,5 +1,6 @@
 import { restBase } from '../config';
 import { CredentialsStore } from '../auth/credentials';
+import { getSetCookies, httpRequest } from './http';
 import { NaumenTask } from './types';
 
 export class NaumenClient {
@@ -34,7 +35,7 @@ export class NaumenClient {
     const cookie = await this.loginViaForm(login, password);
     if (!cookie) {
       throw new Error(
-        'Не удалось войти по логину/паролю. Попробуйте Sign In → Access Key, если ключ можно получить самостоятельно.'
+        'Не удалось войти по логину/паролю. Для локального mock попробуйте Access Key «test», либо проверьте lumos.baseUrl = http://127.0.0.1:8787.'
       );
     }
     await this.credentials.setSessionCookie(cookie);
@@ -60,12 +61,16 @@ export class NaumenClient {
 
   private async searchTask(taskKey: string): Promise<NaumenTask | undefined> {
     const attrs = encodeURIComponent(JSON.stringify({ title: taskKey }));
-    const url = this.withAuth(`${restBase(this.baseUrl)}/search/${this.taskMetaClass}/${attrs}`);
+    const url = `${restBase(this.baseUrl)}/search/${this.taskMetaClass}/${attrs}`;
     const payload = await this.requestJson(url);
 
     const fromSearch = asTask(payload, this.taskMetaClass);
     // Full object from search — use it. Bare UUID still needs get.
-    if (fromSearch?.title && fromSearch.title !== fromSearch.uuid && Object.keys(fromSearch.raw).length > 0) {
+    if (
+      fromSearch?.title &&
+      fromSearch.title !== fromSearch.uuid &&
+      Object.keys(fromSearch.raw).length > 0
+    ) {
       return fromSearch;
     }
 
@@ -79,9 +84,7 @@ export class NaumenClient {
 
   private async getTask(uuid: string): Promise<NaumenTask> {
     const attrs = ['title', 'UUID', 'state', 'description', 'shortDescr', 'status'].join(',');
-    const url = this.withAuth(
-      `${restBase(this.baseUrl)}/get/${encodeURIComponent(uuid)}?attrs=${encodeURIComponent(attrs)}`
-    );
+    const url = `${restBase(this.baseUrl)}/get/${encodeURIComponent(uuid)}?attrs=${encodeURIComponent(attrs)}`;
     const payload = await this.requestJson(url);
     return (
       asTask(payload, this.taskMetaClass) ?? {
@@ -90,11 +93,6 @@ export class NaumenClient {
         raw: {},
       }
     );
-  }
-
-  private withAuth(url: string): string {
-    // accessKey is applied in requestJson via query; keep URL builder simple here
-    return url;
   }
 
   private async loginViaForm(login: string, password: string): Promise<string | undefined> {
@@ -117,60 +115,64 @@ export class NaumenClient {
     ];
 
     let jar = '';
+    let lastNetworkError: unknown;
 
     for (const attempt of attempts) {
-      const response = await fetch(attempt.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          ...(jar ? { Cookie: jar } : {}),
-        },
-        body: attempt.body.toString(),
-        redirect: 'manual',
-      });
+      try {
+        const response = await httpRequest(attempt.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            ...(jar ? { Cookie: jar } : {}),
+          },
+          body: attempt.body.toString(),
+          redirect: 'manual',
+        });
 
-      jar = mergeCookies(jar, extractSetCookies(response));
+        jar = mergeCookies(jar, getSetCookies(response.headers));
 
-      if (jar.includes('JSESSIONID') || response.status === 302 || response.ok) {
-        const probe = await this.probeSession(jar);
-        if (probe) {
-          return jar;
+        if (jar.includes('JSESSIONID') || response.status === 302 || response.ok) {
+          const probe = await this.probeSession(jar);
+          if (probe) {
+            return jar;
+          }
         }
+      } catch (error) {
+        lastNetworkError = error;
       }
     }
 
-    const basicOk = await this.probeBasic(login, password);
-    if (basicOk) {
-      return `BASIC ${Buffer.from(`${login}:${password}`).toString('base64')}`;
+    try {
+      const basicOk = await this.probeBasic(login, password);
+      if (basicOk) {
+        return `BASIC ${Buffer.from(`${login}:${password}`).toString('base64')}`;
+      }
+    } catch (error) {
+      lastNetworkError = error;
     }
 
+    if (lastNetworkError) {
+      throw lastNetworkError;
+    }
     return undefined;
   }
 
   private async probeSession(cookie: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${restBase(this.baseUrl)}/get/employee$1?attrs=UUID`, {
-        headers: { Cookie: cookie },
-        redirect: 'manual',
-      });
-      return response.status !== 401 && response.status !== 403;
-    } catch {
-      return false;
-    }
+    const response = await httpRequest(`${restBase(this.baseUrl)}/get/employee$1?attrs=UUID`, {
+      headers: { Cookie: cookie },
+      redirect: 'manual',
+    });
+    return response.status !== 401 && response.status !== 403;
   }
 
   private async probeBasic(login: string, password: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${restBase(this.baseUrl)}/get/employee$1?attrs=UUID`, {
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`,
-        },
-        redirect: 'manual',
-      });
-      return response.status !== 401 && response.status !== 403;
-    } catch {
-      return false;
-    }
+    const response = await httpRequest(`${restBase(this.baseUrl)}/get/employee$1?attrs=UUID`, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${login}:${password}`).toString('base64')}`,
+      },
+      redirect: 'manual',
+    });
+    return response.status !== 401 && response.status !== 403;
   }
 
   private async requestJson(url: string): Promise<unknown> {
@@ -194,7 +196,7 @@ export class NaumenClient {
       }
     }
 
-    const response = await fetch(finalUrl, { headers, redirect: 'manual' });
+    const response = await httpRequest(finalUrl, { headers, redirect: 'manual' });
 
     if (response.status === 401 || response.status === 403) {
       throw new AuthRequiredError(`HTTP ${response.status}`);
@@ -243,15 +245,6 @@ function appendQuery(url: string, key: string, value: string): string {
 
 function isUnauthorized(error: unknown): boolean {
   return error instanceof Error && /401|403|Unauthorized|AuthRequired/i.test(error.message);
-}
-
-function extractSetCookies(response: Response): string[] {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  if (typeof headers.getSetCookie === 'function') {
-    return headers.getSetCookie();
-  }
-  const single = response.headers.get('set-cookie');
-  return single ? [single] : [];
 }
 
 function mergeCookies(existing: string, setCookies: string[]): string {
@@ -352,7 +345,6 @@ function pickUuid(payload: unknown, metaClass: string): string | undefined {
       }
     }
 
-    // Sometimes UUID is just the numeric suffix and metaClass is separate
     if (typeof record.UUID === 'number' || (typeof record.UUID === 'string' && /^\d+$/.test(record.UUID))) {
       return `${metaClass}$${record.UUID}`;
     }
