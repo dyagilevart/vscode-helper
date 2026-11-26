@@ -1,18 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-  <!-- Monochrome activity-bar glyph: wand casting soft light -->
-  <path fill="#C5C5C5" d="M8.25 4.1a.75.75 0 0 1 .75.75V6.2a.75.75 0 0 1-1.5 0V4.85a.75.75 0 0 1 .75-.75Z" opacity=".85"/>
-  <path fill="#C5C5C5" d="M3.85 8.5a.75.75 0 0 1 .75-.75H6.0a.75.75 0 0 1 0 1.5H4.6a.75.75 0 0 1-.75-.75Z" opacity=".85"/>
-  <path fill="#C5C5C5" d="M4.72 4.72a.75.75 0 0 1 1.06 0l.92.92a.75.75 0 1 1-1.06 1.06l-.92-.92a.75.75 0 0 1 0-1.06Z" opacity=".7"/>
-  <path fill="#C5C5C5" d="M4.72 12.28a.75.75 0 0 1 0-1.06l.92-.92a.75.75 0 1 1 1.06 1.06l-.92.92a.75.75 0 0 1-1.06 0Z" opacity=".7"/>
+  <!-- Centered ember (original) -->
+  <g fill="#C5C5C5">
+    <circle cx="12" cy="11.5" r="7.4" opacity="0.10"/>
+    <circle cx="12" cy="11.5" r="5.1" opacity="0.18"/>
+    <circle cx="12" cy="11.5" r="3.1" opacity="0.34"/>
+    <circle cx="12" cy="11.5" r="1.55"/>
+    <circle cx="7.4" cy="7.8" r="0.45" opacity="0.5"/>
+    <circle cx="16.4" cy="7.2" r="0.35" opacity="0.4"/>
+    <circle cx="17" cy="14.2" r="0.3" opacity="0.35"/>
+  </g>
 
-  <circle cx="8.25" cy="8.5" r="3.35" fill="#C5C5C5" opacity=".16"/>
-  <circle cx="8.25" cy="8.5" r="2.05" fill="#C5C5C5" opacity=".28"/>
-  <circle cx="8.25" cy="8.5" r="1.15" fill="#C5C5C5"/>
-
-  <circle cx="5.7" cy="5.2" r=".55" fill="#C5C5C5" opacity=".55"/>
-  <circle cx="11.1" cy="4.7" r=".45" fill="#C5C5C5" opacity=".45"/>
-  <circle cx="4.9" cy="10.4" r=".4" fill="#C5C5C5" opacity=".4"/>
-
-  <path stroke="#C5C5C5" stroke-width="1.9" stroke-linecap="round" d="M9.35 9.55 19.2 19.85"/>
-  <circle cx="8.85" cy="9.05" r=".95" fill="#C5C5C5"/>
+  <!-- Wand over the same centered light -->
+  <g transform="translate(12 11.5) rotate(48)">
+    <rect x="-1.25" y="0.35" width="2.5" height="9.4" rx="1.25" fill="#C5C5C5" opacity="0.28"/>
+    <rect x="-0.8" y="0.7" width="1.6" height="8.7" rx="0.8" fill="#C5C5C5"/>
+    <rect x="-1.05" y="-0.35" width="2.1" height="1.9" rx="0.65" fill="#C5C5C5"/>
+    <circle cx="0" cy="9.7" r="1.05" fill="#C5C5C5" opacity="0.3"/>
+    <circle cx="0" cy="9.7" r="0.7" fill="#C5C5C5"/>
+  </g>
 </svg>
