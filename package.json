@@ -2,7 +2,7 @@
   "name": "lumos",
   "displayName": "Lumos",
   "description": "Милый помощник разработчика: карточка текущей задачи из Project Ruler по git-ветке",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.82.0"
@@ -37,6 +37,17 @@
           "type": "string",
           "default": "ACRM-\\d+",
           "description": "Regex для извлечения номера задачи из имени git-ветки."
+        },
+        "lumos.issueTypeAttributes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["PMpsbTasktype", "jiraIssueType", "issueType", "taskType", "type"],
+          "markdownDescription": "Имена атрибутов Naumen для типа задачи. На вашей инсталляции это `PMpsbTasktype` (title: Agile - Develop (SUB-TASK))."
+        },
+        "lumos.subTaskPattern": {
+          "type": "string",
+          "default": "SUB-TASK",
+          "markdownDescription": "Regex, по которому тип задачи считается сабтаском (например `SUB-TASK` или `Agile - Develop \\\\(SUB-TASK\\\\)`)."
         }
       }
     },

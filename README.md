@@ -28,7 +28,9 @@ npm run mock:naumen
 
 В settings: `lumos.baseUrl` = `http://127.0.0.1:8787`  
 Sign In: любой логин/пароль **или** Access Key `test`  
-Ветка: `feature/ACRM-234123`
+Ветка: `feature/ACRM-234123` (сабтаск) или `feature/ACRM-100001` (мастер → предупреждение)
+
+Если тип задачи не `SUB-TASK`, карточка и status bar активно мигают.
 
 Проверка API:
 

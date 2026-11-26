@@ -79,6 +79,7 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
     const greeting = greetingForHour();
     const phrase = phraseOfTheDay();
     const lit = state.kind === 'task';
+    const danger = state.kind === 'task' && Boolean(state.subTaskWarning);
 
     const body = (() => {
       switch (state.kind) {
@@ -109,11 +110,28 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
             </div>`;
         case 'task':
           return `
+            ${
+              state.subTaskWarning
+                ? `<div class="alert" role="alert">
+                    <div class="alert-title">⚠ Не сабтаск</div>
+                    <p>${escapeHtml(state.subTaskWarning.message)}</p>
+                  </div>`
+                : ''
+            }
             <div class="key-row">
               <div class="key">${escapeHtml(state.taskKey)}</div>
-              <span class="badge">свиток открыт</span>
+              <span class="badge ${state.subTaskWarning ? 'badge-danger' : ''}">${
+                state.subTaskWarning ? 'проверьте тип' : 'свиток открыт'
+              }</span>
             </div>
             <h2 class="title">${escapeHtml(displayTitle(state.task.title, state.taskKey))}</h2>
+            ${
+              state.task.issueType || state.subTaskWarning?.issueType
+                ? `<div class="meta"><span class="label">Тип задачи</span>${escapeHtml(
+                    state.task.issueType ?? state.subTaskWarning?.issueType ?? ''
+                  )}</div>`
+                : ''
+            }
             ${
               state.task.state
                 ? `<div class="meta"><span class="label">Статус</span>${escapeHtml(
@@ -177,6 +195,12 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
     .card.lit {
       box-shadow: 0 0 0 1px var(--glow), 0 8px 24px color-mix(in srgb, var(--btn) 18%, transparent);
     }
+    .card.danger {
+      border-color: color-mix(in srgb, #e85d5d 55%, var(--border));
+      box-shadow: 0 0 0 1px color-mix(in srgb, #e85d5d 40%, transparent),
+        0 8px 24px color-mix(in srgb, #e85d5d 18%, transparent);
+      animation: rise 280ms ease-out, pulse-danger 1s ease-in-out infinite;
+    }
     .card.lit::before {
       content: '';
       position: absolute;
@@ -187,6 +211,32 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
       animation: shimmer 900ms ease-out;
       opacity: 0.85;
     }
+    .card.danger::before {
+      background: linear-gradient(90deg, transparent, #e85d5d, transparent);
+      animation: shimmer 900ms ease-out, pulse-bar 1s ease-in-out infinite;
+    }
+    .alert {
+      margin: 0 0 12px;
+      padding: 10px 11px;
+      border-radius: 8px;
+      background: color-mix(in srgb, #e85d5d 18%, var(--card));
+      border: 1px solid color-mix(in srgb, #e85d5d 45%, transparent);
+      animation: pulse-alert 1s ease-in-out infinite;
+    }
+    .alert-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: 0.02em;
+    }
+    .alert p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .badge-danger {
+      border-color: color-mix(in srgb, #e85d5d 50%, var(--border));
+      color: color-mix(in srgb, #e85d5d 70%, var(--fg));
+    }
     @keyframes rise {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -195,6 +245,18 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
       from { transform: translateX(-40%); opacity: 0; }
       30% { opacity: 0.9; }
       to { transform: translateX(20%); opacity: 0; }
+    }
+    @keyframes pulse-danger {
+      0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, #e85d5d 35%, transparent); }
+      50% { box-shadow: 0 0 0 2px color-mix(in srgb, #e85d5d 70%, transparent), 0 0 18px color-mix(in srgb, #e85d5d 28%, transparent); }
+    }
+    @keyframes pulse-alert {
+      0%, 100% { opacity: 1; filter: brightness(1); }
+      50% { opacity: 0.82; filter: brightness(1.12); }
+    }
+    @keyframes pulse-bar {
+      0%, 100% { opacity: 0.55; }
+      50% { opacity: 1; }
     }
     .key-row {
       display: flex;
@@ -268,7 +330,7 @@ export class TaskViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <p class="hello">${escapeHtml(greeting)}</p>
-  <div class="card${lit ? ' lit' : ''}">${body}</div>
+  <div class="card${lit ? ' lit' : ''}${danger ? ' danger' : ''}">${body}</div>
   <p class="phrase">${escapeHtml(phrase)}</p>
   <script>
     const vscode = acquireVsCodeApi();

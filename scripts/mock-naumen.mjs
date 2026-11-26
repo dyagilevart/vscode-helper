@@ -18,19 +18,21 @@ const HOST = process.env.LUMOS_MOCK_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.LUMOS_MOCK_PORT ?? 8787);
 const ACCESS_KEY = process.env.LUMOS_MOCK_ACCESS_KEY ?? 'test';
 
-/** @type {Record<string, { uuid: string, title: string, state: string, description: string }>} */
+/** @type {Record<string, { uuid: string, title: string, state: string, description: string, taskType: { UUID: string, title: string } }>} */
 const TASKS = {
   'ACRM-234123': {
     uuid: 'GMtask$100500',
     title: 'Релизные процессы Agile "ACRM-234123 Ошибка авторизации"',
     state: 'В работе',
-    description: 'Mock-задача для локальной проверки Lumos.',
+    description: 'Mock SUB-TASK — нормальный сценарий.',
+    taskType: { UUID: 'PMibtask$51604', title: 'Agile - Develop (SUB-TASK)' },
   },
   'ACRM-100001': {
     uuid: 'GMtask$100001',
     title: 'Бэклог команды "ACRM-100001 Починить копирование ссылки"',
     state: 'На ревью',
-    description: 'Вторая фикстура, если нужна другая ветка.',
+    description: 'Mock мастер-задача — должна мигать предупреждением.',
+    taskType: { UUID: 'PMibtask$1', title: 'Agile - Story' },
   },
 };
 
@@ -126,6 +128,7 @@ async function handle(req, res) {
         description: task.description,
         shortDescr: task.title,
         status: task.state,
+        PMpsbTasktype: task.taskType,
       });
       return;
     }

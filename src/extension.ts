@@ -5,6 +5,7 @@ import { flavor } from './flavor/messages';
 import { getCurrentGitBranch, onGitBranchNameChange, waitForGitBranch } from './helper/git';
 import { extractTaskKey } from './helper/taskKey';
 import { AuthRequiredError, NaumenClient } from './naumen/client';
+import { checkSubTask } from './naumen/subTask';
 import { ViewState } from './naumen/types';
 import { LumosStatusBar } from './view/statusBar';
 import { TaskViewProvider } from './view/taskViewProvider';
@@ -83,7 +84,12 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       try {
-        const client = new NaumenClient(config.baseUrl, credentials, config.taskMetaClass);
+        const client = new NaumenClient(
+          config.baseUrl,
+          credentials,
+          config.taskMetaClass,
+          config.issueTypeAttributes
+        );
         await client.login();
         vscode.window.showInformationMessage(flavor.signedIn);
         lastFetchedKey = undefined;
@@ -230,7 +236,12 @@ async function refreshTaskCard(
   statusBar.setSearching(taskKey);
 
   try {
-    const client = new NaumenClient(config.baseUrl, credentials, config.taskMetaClass);
+    const client = new NaumenClient(
+      config.baseUrl,
+      credentials,
+      config.taskMetaClass,
+      config.issueTypeAttributes
+    );
     const task = await client.findTaskByKey(taskKey);
     if (!task) {
       statusBar.setTask(taskKey);
@@ -242,13 +253,34 @@ async function refreshTaskCard(
       return;
     }
 
+    const subTask = checkSubTask(task, {
+      attributeNames: config.issueTypeAttributes,
+      subTaskPattern: config.subTaskPattern,
+    });
+
     lastFetchedKey = taskKey;
     lastFetchedAt = Date.now();
+
+    if (!subTask.ok) {
+      statusBar.setSubTaskWarning(taskKey, subTask.reason);
+      provider.setState({
+        kind: 'task',
+        taskKey,
+        task: { ...task, issueType: task.issueType ?? subTask.issueType },
+        url: operatorTaskUrl(config.baseUrl, task.uuid),
+        subTaskWarning: {
+          issueType: subTask.issueType,
+          message: subTask.reason,
+        },
+      });
+      return;
+    }
+
     statusBar.setTask(taskKey);
     provider.setState({
       kind: 'task',
       taskKey,
-      task,
+      task: { ...task, issueType: task.issueType ?? subTask.issueType },
       url: operatorTaskUrl(config.baseUrl, task.uuid),
     });
   } catch (error) {

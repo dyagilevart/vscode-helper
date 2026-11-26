@@ -7,7 +7,8 @@ export class NaumenClient {
   constructor(
     private readonly baseUrl: string,
     private readonly credentials: CredentialsStore,
-    private readonly taskMetaClass: string
+    private readonly taskMetaClass: string,
+    private readonly issueTypeAttributes: string[] = []
   ) {}
 
   async ensureSession(): Promise<void> {
@@ -64,7 +65,7 @@ export class NaumenClient {
     const url = `${restBase(this.baseUrl)}/search/${this.taskMetaClass}/${attrs}`;
     const payload = await this.requestJson(url);
 
-    const fromSearch = asTask(payload, this.taskMetaClass);
+    const fromSearch = asTask(payload, this.taskMetaClass, this.issueTypeAttributes);
     // Full object from search — use it. Bare UUID still needs get.
     if (
       fromSearch?.title &&
@@ -83,11 +84,24 @@ export class NaumenClient {
   }
 
   private async getTask(uuid: string): Promise<NaumenTask> {
-    const attrs = ['title', 'UUID', 'state', 'description', 'shortDescr', 'status'].join(',');
+    const attrs = [
+      'title',
+      'UUID',
+      'state',
+      'description',
+      'shortDescr',
+      'status',
+      ...this.issueTypeAttributes,
+      'PMpsbTasktype',
+      'jiraIssueType',
+      'issueType',
+      'taskType',
+      'type',
+    ].join(',');
     const url = `${restBase(this.baseUrl)}/get/${encodeURIComponent(uuid)}?attrs=${encodeURIComponent(attrs)}`;
     const payload = await this.requestJson(url);
     return (
-      asTask(payload, this.taskMetaClass) ?? {
+      asTask(payload, this.taskMetaClass, this.issueTypeAttributes) ?? {
         uuid,
         title: uuid,
         raw: {},
@@ -268,7 +282,11 @@ function mergeCookies(existing: string, setCookies: string[]): string {
   return [...map.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
-function asTask(payload: unknown, metaClass: string): NaumenTask | undefined {
+function asTask(
+  payload: unknown,
+  metaClass: string,
+  issueTypeAttributes: string[] = []
+): NaumenTask | undefined {
   if (!payload) {
     return undefined;
   }
@@ -279,7 +297,7 @@ function asTask(payload: unknown, metaClass: string): NaumenTask | undefined {
 
   if (Array.isArray(payload)) {
     for (const item of payload) {
-      const task = asTask(item, metaClass);
+      const task = asTask(item, metaClass, issueTypeAttributes);
       if (task) {
         return task;
       }
@@ -293,7 +311,7 @@ function asTask(payload: unknown, metaClass: string): NaumenTask | undefined {
     if (!uuid && typeof record.title !== 'string') {
       for (const key of ['result', 'objects', 'data', 'items']) {
         if (key in record) {
-          const nested = asTask(record[key], metaClass);
+          const nested = asTask(record[key], metaClass, issueTypeAttributes);
           if (nested) {
             return nested;
           }
@@ -306,15 +324,39 @@ function asTask(payload: unknown, metaClass: string): NaumenTask | undefined {
       return undefined;
     }
 
+    const issueType = pickIssueType(record, issueTypeAttributes);
+
     return {
       uuid,
       title: String(record.title ?? record.shortDescr ?? uuid),
       state: stringifyAttr(record.state ?? record.status),
       description: stringifyAttr(record.description ?? record.shortDescr),
+      issueType,
       raw: record,
     };
   }
 
+  return undefined;
+}
+
+function pickIssueType(record: Record<string, unknown>, attributeNames: string[]): string | undefined {
+  const keys = [
+    ...attributeNames,
+    'PMpsbTasktype',
+    'jiraIssueType',
+    'jiraType',
+    'issueType',
+    'taskType',
+    'type',
+  ];
+  for (const key of keys) {
+    if (key in record) {
+      const value = stringifyAttr(record[key]);
+      if (value) {
+        return value;
+      }
+    }
+  }
   return undefined;
 }
 

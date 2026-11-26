@@ -4,15 +4,20 @@ export interface LumosConfig {
   baseUrl: string;
   taskMetaClass: string;
   branchPattern: string;
+  issueTypeAttributes: string[];
+  subTaskPattern: string;
 }
 
 export function getConfig(): LumosConfig {
   const cfg = vscode.workspace.getConfiguration('lumos');
   const baseUrl = normalizeBaseUrl(cfg.get<string>('baseUrl') ?? '');
+  const attrs = cfg.get<string[]>('issueTypeAttributes') ?? [];
   return {
     baseUrl,
     taskMetaClass: (cfg.get<string>('taskMetaClass') ?? 'GMtask').trim() || 'GMtask',
     branchPattern: (cfg.get<string>('branchPattern') ?? 'ACRM-\\d+').trim() || 'ACRM-\\d+',
+    issueTypeAttributes: attrs.map((item) => item.trim()).filter(Boolean),
+    subTaskPattern: (cfg.get<string>('subTaskPattern') ?? 'SUB-TASK').trim() || 'SUB-TASK',
   };
 }
 
